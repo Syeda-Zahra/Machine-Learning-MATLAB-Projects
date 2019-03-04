@@ -1,0 +1,57 @@
+#libraries used
+library(rmr2)
+library(rhdfs)
+
+#changing folder location and reading the file
+setwd("/home/student2/skzahra/Desktop/bme777")
+databme777<-read.csv("diabetic_data_V2.csv")
+
+#initializing hdfs and changing object typesto make sure the program recognizes genger as character, age as numeric, A1Cresult as numeric etc.
+hdfs.init()
+hdfs.init()
+databme777$gender <- as.character(databme777$gender)
+databme777$age <- as.numeric(databme777$age)
+databme777$A1Cresult<- as.numeric(databme777$A1Cresult)
+databme777$readmitted<-as.numeric(databme777$readmitted)
+x<-databme777$diag_1
+x<-as.character(x)
+x[x=="?"] <- "0"
+x[x=="E909"]<-"0"
+databme777$diag_1 <- as.numeric(x)
+
+#transferring data values to appropriate indices
+databme777.values <- to.dfs(databme777)
+
+#first map function:
+databme777.map.fn <- function(k,v) {
+p <-which(((v[,8]<=579) & (v[,8]>=520)) & (v[,4]==1) | (v[,8]==787)  & (v[,4]==1))
+keyval(p, v[p,]) }
+
+#first reduce function
+databme777.reduce.fn <- function(k,v) {
+keyval(k,(v)) }
+
+#second map function:
+databme777.map.fns <- function(k,v) {
+q <-which(((v[,8]<=579) & (v[,8]>=520)) & (v[,4]!=1) | (v[,8]==787)  & (v[,4]!=1))  
+keyval(q, v[q,])  }
+
+#second reduce function
+databme777.reduce.fns <- function(k,v) {
+keyval(k,((v))) }
+
+#extracting the data using mapreduce for the two different classes
+extractData1 <- mapreduce(input= databme777.values,map = databme777.map.fn,reduce = databme777.reduce.fn)
+extractData2 <- mapreduce(input= databme777.values,map = databme777.map.fns,reduce = databme777.reduce.fns)
+
+#writes data to table for class 1
+new_var1<-from.dfs(extractData1)
+new_var1<- as.data.frame(new_var1)
+head(as.data.frame(new_var1))
+write.table(as.data.frame(new_var1),file="BME777_BigData_Extract_class1.csv", quote=F,sep=",",row.names=F)
+
+#writes data to table for class 2
+new_var2<-from.dfs(extractData2)
+new_var2<- as.data.frame(new_var2)
+head(as.data.frame(new_var2))
+write.table(as.data.frame(new_var2),file="BME777_BigData_Extract_class2.csv", quote=F,sep=",",row.names=F)
